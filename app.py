@@ -8,35 +8,30 @@ st.set_page_config(
     page_icon="🚨",
     layout="wide"
 )
+
 # ---------------- CUSTOM CSS ----------------
 st.markdown("""
 <style>
-
-/* Main background */
 .stApp {
     background: linear-gradient(to bottom right, #07111f, #0d1b2a);
     color: white;
 }
 
-/* Sidebar */
 section[data-testid="stSidebar"] {
     background: #111827;
     border-right: 1px solid rgba(255,255,255,0.08);
 }
 
-/* Main title */
 h1 {
     color: #60a5fa !important;
     font-weight: 800 !important;
     letter-spacing: 1px;
 }
 
-/* Section headers */
 h2, h3 {
     color: #f8fafc !important;
 }
 
-/* Metric cards */
 [data-testid="metric-container"] {
     background: linear-gradient(135deg, #1e293b, #0f172a);
     border: 1px solid rgba(96,165,250,0.25);
@@ -45,63 +40,60 @@ h2, h3 {
     box-shadow: 0 4px 18px rgba(0,0,0,0.35);
 }
 
-/* Metric labels */
 [data-testid="metric-container"] label {
     color: #94a3b8 !important;
     font-size: 14px !important;
 }
 
-/* Metric values */
 [data-testid="metric-container"] div {
     color: white !important;
 }
 
-/* Tabs */
 button[data-baseweb="tab"] {
     background: #172554 !important;
     color: white !important;
     border-radius: 10px !important;
     margin-right: 8px !important;
     padding: 10px 18px !important;
-    border: none !important;
 }
 
 button[data-baseweb="tab"][aria-selected="true"] {
     background: linear-gradient(135deg, #2563eb, #38bdf8) !important;
-    color: white !important;
 }
 
-/* Tables */
 [data-testid="stDataFrame"] {
     border-radius: 14px;
     overflow: hidden;
     border: 1px solid rgba(255,255,255,0.08);
 }
-
-/* Expander */
-.streamlit-expanderHeader {
-    background: #172554;
-    border-radius: 10px;
-    color: white !important;
-}
-
-/* Info box */
-.stAlert {
-    border-radius: 14px;
-}
-
-/* Scrollbar */
-::-webkit-scrollbar {
-    width: 10px;
-}
-
-::-webkit-scrollbar-thumb {
-    background: #2563eb;
-    border-radius: 10px;
-}
-
 </style>
 """, unsafe_allow_html=True)
+
+
+# ---------------- HELPER FUNCTION ----------------
+def apply_dark_theme(fig):
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="white"),
+        title_font=dict(color="white", size=20)
+    )
+    return fig
+
+
+def response_bucket(x):
+    if x <= 15:
+        return "0-15 min Excellent"
+    elif x <= 30:
+        return "16-30 min Good"
+    elif x <= 60:
+        return "31-60 min Average"
+    elif x <= 90:
+        return "61-90 min Slow"
+    else:
+        return "90+ min Critical"
+
 
 # ---------------- LOAD DATA ----------------
 @st.cache_data
@@ -109,6 +101,7 @@ def load_data():
     df = pd.read_excel("crime_data.xlsx")
     df["Date of Crime"] = pd.to_datetime(df["Date of Crime"])
     return df
+
 
 df = load_data()
 
@@ -145,7 +138,9 @@ filtered_df = df[
     (df["City"].isin(city_filter)) &
     (df["Crime Type"].isin(crime_filter)) &
     (df["Severity"].isin(severity_filter))
-]
+].copy()
+
+filtered_df["Response SLA"] = filtered_df["Police Response Time (mins)"].apply(response_bucket)
 
 # ---------------- HEADER ----------------
 st.title("Crime Data Analytics Dashboard")
@@ -159,12 +154,16 @@ and operational performance.
 total_cases = len(filtered_df)
 total_cities = filtered_df["City"].nunique()
 total_crime_types = filtered_df["Crime Type"].nunique()
+
 conviction_rate = (
     (filtered_df["Conviction"].eq("Yes").sum() / total_cases) * 100
     if total_cases > 0 else 0
 )
-filtered_df = filtered_df.copy()
-filtered_df["Response SLA"] = filtered_df["Police Response Time (mins)"].apply(response_bucket)
+
+avg_response = (
+    filtered_df["Police Response Time (mins)"].mean()
+    if total_cases > 0 else 0
+)
 
 col1, col2, col3, col4, col5 = st.columns(5)
 
@@ -185,7 +184,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "ML Insights"
 ])
 
-# ---------------- TAB 1: OVERVIEW ----------------
+# ---------------- TAB 1 ----------------
 with tab1:
     st.subheader("Crime Overview")
 
@@ -200,10 +199,11 @@ with tab1:
             x="Crime Type",
             y="Count",
             title="Crime Type Distribution",
-            text="Count"
+            text="Count",
+            color="Crime Type"
         )
         fig.update_layout(xaxis_tickangle=-35)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(apply_dark_theme(fig), use_container_width=True)
 
     with col2:
         yearly = filtered_df.groupby("Year").size().reset_index(name="Total Cases")
@@ -215,7 +215,7 @@ with tab1:
             markers=True,
             title="Year-wise Crime Trend"
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(apply_dark_theme(fig), use_container_width=True)
 
     col3, col4 = st.columns(2)
 
@@ -230,7 +230,7 @@ with tab1:
             title="Crime Severity Distribution",
             hole=0.4
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(apply_dark_theme(fig), use_container_width=True)
 
     with col4:
         status = filtered_df["Case Status"].value_counts().reset_index()
@@ -241,11 +241,12 @@ with tab1:
             x="Case Status",
             y="Count",
             title="Case Status Breakdown",
-            text="Count"
+            text="Count",
+            color="Case Status"
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(apply_dark_theme(fig), use_container_width=True)
 
-# ---------------- TAB 2: CITY ANALYSIS ----------------
+# ---------------- TAB 2 ----------------
 with tab2:
     st.subheader("City-wise Crime Analysis")
 
@@ -260,13 +261,18 @@ with tab2:
             x="City",
             y="Total Cases",
             title="City-wise Crime Cases",
-            text="Total Cases"
+            text="Total Cases",
+            color="City"
         )
         fig.update_layout(xaxis_tickangle=-35)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(apply_dark_theme(fig), use_container_width=True)
 
     with col2:
-        city_response = filtered_df.groupby("City")["Police Response Time (mins)"].mean().reset_index()
+        city_response = (
+            filtered_df.groupby("City")["Police Response Time (mins)"]
+            .mean()
+            .reset_index()
+        )
         city_response.columns = ["City", "Avg Response Time"]
 
         fig = px.bar(
@@ -274,12 +280,17 @@ with tab2:
             x="City",
             y="Avg Response Time",
             title="Average Police Response Time by City",
-            text_auto=".1f"
+            text_auto=".1f",
+            color="Avg Response Time"
         )
         fig.update_layout(xaxis_tickangle=-35)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(apply_dark_theme(fig), use_container_width=True)
 
-    city_loss = filtered_df.groupby("City")["Property Loss (INR)"].mean().reset_index()
+    city_loss = (
+        filtered_df.groupby("City")["Property Loss (INR)"]
+        .mean()
+        .reset_index()
+    )
     city_loss.columns = ["City", "Average Property Loss"]
 
     fig = px.bar(
@@ -287,12 +298,13 @@ with tab2:
         x="City",
         y="Average Property Loss",
         title="Average Property Loss by City",
-        text_auto=".0f"
+        text_auto=".0f",
+        color="Average Property Loss"
     )
     fig.update_layout(xaxis_tickangle=-35)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(apply_dark_theme(fig), use_container_width=True)
 
-# ---------------- TAB 3: CRIME PATTERNS ----------------
+# ---------------- TAB 3 ----------------
 with tab3:
     st.subheader("Crime Pattern Analysis")
 
@@ -307,9 +319,10 @@ with tab3:
             x="Time of Day",
             y="Count",
             title="Crimes by Time of Day",
-            text="Count"
+            text="Count",
+            color="Time of Day"
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(apply_dark_theme(fig), use_container_width=True)
 
     with col2:
         season_data = filtered_df["Season"].value_counts().reset_index()
@@ -322,9 +335,13 @@ with tab3:
             title="Season-wise Crime Distribution",
             hole=0.35
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(apply_dark_theme(fig), use_container_width=True)
 
-    heatmap_data = filtered_df.groupby(["Time of Day", "Crime Type"]).size().reset_index(name="Count")
+    heatmap_data = (
+        filtered_df.groupby(["Time of Day", "Crime Type"])
+        .size()
+        .reset_index(name="Count")
+    )
 
     fig = px.density_heatmap(
         heatmap_data,
@@ -332,12 +349,13 @@ with tab3:
         y="Time of Day",
         z="Count",
         title="Crime Type vs Time of Day Heatmap",
-        text_auto=True
+        text_auto=True,
+        color_continuous_scale="Blues"
     )
     fig.update_layout(xaxis_tickangle=-35)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(apply_dark_theme(fig), use_container_width=True)
 
-# ---------------- TAB 4: SQL INSIGHTS ----------------
+# ---------------- TAB 4 ----------------
 with tab4:
     st.subheader("SQL-Based Business Insights")
 
@@ -368,6 +386,7 @@ with tab4:
             )
             .reset_index()
         )
+
         conviction["conviction_rate"] = (
             conviction["convictions"] / conviction["total_cases"] * 100
         ).round(1)
@@ -375,20 +394,6 @@ with tab4:
         st.dataframe(conviction, use_container_width=True)
 
     st.markdown("### Police Response SLA Buckets")
-
-    def response_bucket(x):
-        if x <= 15:
-            return "0-15 min Excellent"
-        elif x <= 30:
-            return "16-30 min Good"
-        elif x <= 60:
-            return "31-60 min Average"
-        elif x <= 90:
-            return "61-90 min Slow"
-        else:
-            return "90+ min Critical"
-
-    filtered_df["Response SLA"] = filtered_df["Police Response Time (mins)"].apply(response_bucket)
 
     sla = filtered_df["Response SLA"].value_counts().reset_index()
     sla.columns = ["Response SLA", "Cases"]
@@ -398,11 +403,12 @@ with tab4:
         x="Response SLA",
         y="Cases",
         title="Police Response Time SLA Buckets",
-        text="Cases"
+        text="Cases",
+        color="Response SLA"
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(apply_dark_theme(fig), use_container_width=True)
 
-# ---------------- TAB 5: ML INSIGHTS ----------------
+# ---------------- TAB 5 ----------------
 with tab5:
     st.subheader("Machine Learning Insights")
 
@@ -442,9 +448,10 @@ with tab5:
         y="Feature",
         orientation="h",
         title="Feature Importance for Crime Prediction",
-        text_auto=".2f"
+        text_auto=".2f",
+        color="Importance"
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(apply_dark_theme(fig), use_container_width=True)
 
     st.info(
         "ML insight: Faster police response, more officers assigned, CCTV availability, witness presence, and crime severity are important factors for predicting case outcomes."
@@ -452,5 +459,6 @@ with tab5:
 
 # ---------------- DATASET VIEW ----------------
 st.divider()
+
 with st.expander("View Filtered Dataset"):
     st.dataframe(filtered_df, use_container_width=True)
